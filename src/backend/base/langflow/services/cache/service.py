@@ -224,11 +224,11 @@ class RedisCache(AsyncBaseCacheService, Generic[LockType]):
         import redis
 
         try:
-            asyncio.run(self._client.ping())
+            kwargs = self._client.get_connection_kwargs()
+            return redis.Redis(host=kwargs.get('host'), port=kwargs.get('port'), db=kwargs.get('db')).ping()
         except redis.exceptions.ConnectionError:
             logger.exception("RedisCache could not connect to the Redis server")
             return False
-        return True
 
     @override
     async def get(self, key, lock=None):
@@ -351,3 +351,12 @@ class AsyncInMemoryCache(AsyncBaseCacheService, Generic[AsyncLockType]):
 
     async def contains(self, key) -> bool:
         return key in self.cache
+
+
+if __name__ == '__main__':
+    async def cs():
+        r = RedisCache()
+        await r.set("a", 1)
+
+
+    asyncio.run(cs())
