@@ -351,12 +351,3 @@ class AsyncInMemoryCache(AsyncBaseCacheService, Generic[AsyncLockType]):
 
     async def contains(self, key) -> bool:
         return key in self.cache
-
-
-if __name__ == '__main__':
-    async def cs():
-        r = RedisCache()
-        await r.set("a", 1)
-
-
-    asyncio.run(cs())
