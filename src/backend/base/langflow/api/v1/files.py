@@ -24,9 +24,9 @@ router = APIRouter(tags=["Files"], prefix="/files")
 # then finds it in the database and returns it while
 # using the current user as the owner
 async def get_flow(
-    flow_id: UUID,
-    current_user: CurrentActiveUser,
-    session: DbSession,
+        flow_id: UUID,
+        current_user: CurrentActiveUser,
+        session: DbSession,
 ):
     # AttributeError: 'SelectOfScalar' object has no attribute 'first'
     flow = await session.get(Flow, flow_id)
@@ -71,9 +71,38 @@ async def upload_file(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@router.post("/upload_new/{flow_id}", status_code=HTTPStatus.CREATED)
+async def upload_file_new(
+        *,
+        file: UploadFile,
+        flow_id: str,
+        storage_service: Annotated[StorageService, Depends(get_storage_service)],
+        settings_service: Annotated[SettingsService, Depends(get_settings_service)],
+) -> UploadFileResponse:
+    try:
+        max_file_size_upload = settings_service.settings.max_file_size_upload
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    if file.size > max_file_size_upload * 1024 * 1024:
+        raise HTTPException(
+            status_code=413, detail=f"File size is larger than the maximum file size {max_file_size_upload}MB."
+        )
+    try:
+        file_content = await file.read()
+        timestamp = datetime.now(tz=timezone.utc).astimezone().strftime("%Y-%m-%d_%H-%M-%S")
+        file_name = file.filename or hashlib.sha256(file_content).hexdigest()
+        full_file_name = f"{timestamp}_{file_name}"
+        folder = str(flow_id)
+        await storage_service.save_file(flow_id=folder, file_name=full_file_name, data=file_content)
+        return UploadFileResponse(flow_id=str(flow_id), file_path=f"{folder}/{full_file_name}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @router.get("/download/{flow_id}/{file_name}")
 async def download_file(
-    file_name: str, flow_id: UUID, storage_service: Annotated[StorageService, Depends(get_storage_service)]
+        file_name: str, flow_id: UUID, storage_service: Annotated[StorageService, Depends(get_storage_service)]
 ):
     flow_id_str = str(flow_id)
     extension = file_name.split(".")[-1]
@@ -127,8 +156,8 @@ async def download_image(file_name: str, flow_id: UUID):
 
 @router.get("/profile_pictures/{folder_name}/{file_name}")
 async def download_profile_picture(
-    folder_name: str,
-    file_name: str,
+        folder_name: str,
+        file_name: str,
 ):
     try:
         storage_service = get_storage_service()
@@ -137,7 +166,8 @@ async def download_profile_picture(
         config_path = Path(config_dir)  # type: ignore[arg-type]
         folder_path = config_path / "profile_pictures" / folder_name
         content_type = build_content_type_from_extension(extension)
-        file_content = await storage_service.get_file(flow_id=folder_path, file_name=file_name)  # type: ignore[arg-type]
+        file_content = await storage_service.get_file(flow_id=folder_path,
+                                                      file_name=file_name)  # type: ignore[arg-type]
         return StreamingResponse(BytesIO(file_content), media_type=content_type)
 
     except Exception as e:
@@ -168,8 +198,8 @@ async def list_profile_pictures():
 
 @router.get("/list/{flow_id}")
 async def list_files(
-    flow: Annotated[Flow, Depends(get_flow)],
-    storage_service: Annotated[StorageService, Depends(get_storage_service)],
+        flow: Annotated[Flow, Depends(get_flow)],
+        storage_service: Annotated[StorageService, Depends(get_storage_service)],
 ):
     try:
         files = await storage_service.list_files(flow_id=str(flow.id))
@@ -181,9 +211,9 @@ async def list_files(
 
 @router.delete("/delete/{flow_id}/{file_name}")
 async def delete_file(
-    file_name: str,
-    flow: Annotated[Flow, Depends(get_flow)],
-    storage_service: Annotated[StorageService, Depends(get_storage_service)],
+        file_name: str,
+        flow: Annotated[Flow, Depends(get_flow)],
+        storage_service: Annotated[StorageService, Depends(get_storage_service)],
 ):
     try:
         await storage_service.delete_file(flow_id=str(flow.id), file_name=file_name)
